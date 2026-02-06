@@ -1,0 +1,4 @@
+# This usually would not exist. But in case `env.sh` ever gets called
+# un-symlinked, we should prevent it from being committed.
+.conda/
+
