@@ -1,0 +1,79 @@
+---
+globs: *.py,*.pyi,*.ipynb,pyproject.toml
+alwaysApply: false
+---
+Summary of our [Python Style Guide](External/DADevEnv/Reference/Python Style Guide (Full).md). Consult the full file for detailed examples and decision trees.
+
+## Formatting
+- **Line length:** 60 chars soft, 80 hard.
+- **Multi-line:** Closing delimiter on its own line, aligned with the opening line.
+- **Quotes:** Double `"` for text/user-facing strings. Single `'` for keywords, dict keys, literals.
+- Two blank lines between top-level defs; one between methods.
+- **No linter/formatter** — manual formatting per this guide.
+
+## Naming
+- PEP 8 basics: `snake_case` functions/vars, `PascalCase` classes, `ALL_CAPS` constants, `_leading_underscore` private.
+- Hierarchy naming: Protocol = plain name (`Animal`), ABC base = `Base` suffix (`AnimalBase`), Mixin = `Mixin` suffix (`GreyAnimalMixin`), Concrete = specific prefix (`ElephantAnimal`).
+- Never use `__double_underscore` name mangling.
+
+## Type Hints (required everywhere)
+- Signatures: prefer abstract types (`Iterable`, `Mapping`, `Sequence` from `collections.abc`).
+- Instances: prefer built-in generics (`list[str]`, `dict[str, int]`).
+- Prefer `isinstance` checks over `cast`. Fix type errors rather than suppressing.
+
+## Imports
+- Three groups separated by blank lines: stdlib, external, internal.
+- Prefer `from` imports over whole-module imports.
+- Every module must define `__all__`.
+- Package `__init__.py` uses `from .module import *`.
+- Type variables/aliases go between imports and constants.
+
+## Module Structure (order)
+1. Module docstring
+2. Imports (stdlib → external → internal)
+3. `__all__`
+4. Type variables/aliases
+5. Constants
+6. Functions
+7. Classes
+8. Main block
+
+## Code Organization
+- Functions: 10–20 lines typical, 30 max. Extract helpers beyond that.
+- Class member order: class vars → `__init__`/factories → properties → public methods → private methods → abstract methods.
+- Early returns over deep nesting.
+
+## Architecture
+- **Protocols** define public contracts (centralized in `protocols.py` or `protocols/`). Use for structural subtyping and avoiding circular imports.
+- **ABC** for base implementations with shared functionality.
+- **Data:** Frozen Pydantic models (`model_config = {'frozen': True}`). Copy-on-write via `model_copy(update={...})`.
+- **Context/state:** Hand-written classes.
+- **Lazy computation:** `@property` + `@cache` for expensive multi-step computations.
+- Inheritance depth ≤ 4. Prefer composition for "has-a" relationships.
+- Avoid classes as function namespaces — use plain functions instead.
+
+## Error Handling
+- Type-guided LBYL: use conditionals for expected cases, exceptions for actual errors.
+- Catch specific exceptions only.
+- No mutable default arguments — use `None` + create inside.
+
+## Async
+- Use for I/O, concurrency, real-time feedback. Keep sync for pure computation.
+- Define async at protocol level when implementations may need it.
+- Entry: `asyncio.run(main())`.
+
+## Documentation
+- Google-style docstrings on all public APIs and abstract/overridable methods.
+- Don't duplicate type info in docstrings (types are in signatures).
+- Module-level docstring on every module.
+
+## Testing
+- pytest with `_test.py` suffix, tests live next to source files.
+- Test behaviors/contracts, not implementations.
+- `@pytest.mark.asyncio` for async tests.
+- Include pyright type-check as a test.
+
+## Tooling
+- **Type checker:** pyright
+- **Test framework:** pytest + pytest-asyncio
+- **Key packages:** pydantic, pyyaml, pathlib, asyncio

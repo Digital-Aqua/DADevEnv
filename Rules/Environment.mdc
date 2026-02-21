@@ -1,0 +1,4 @@
+---
+alwaysApply: true
+---
+Work in the `.conda` environment prefix via `env.sh`. Run `./env.sh` to update the environment after modifying `environment.yaml`. Run `./env.sh <command>` to run in the environment (automatic updates). Source `./env.sh` to activate the environment in the current shell (automatic updates).
