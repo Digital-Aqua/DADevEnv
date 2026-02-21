@@ -83,6 +83,8 @@ ssh_() {
     ssh "$USER@$HOSTNAME" "$COMMAND"
 }
 
+# Waits for a container to become healthy.
+# Usage: docker_wait_for_healthy <container> [timeout=60]
 docker_wait_for_healthy() {
     local CONTAINER="$1"
     local TIMEOUT="${2:-60}"  # Default 60 seconds
@@ -97,4 +99,58 @@ docker_wait_for_healthy() {
         docker logs "$CONTAINER" 2>&1 | tail -20
         return 1
     fi
+}
+
+# Extracts container names from docker compose output.
+# Usage: grep_array <input> <extract_regex> [output_var]
+#   extract_regex: Perl regex with \K; matched part becomes array elements.
+#   e.g. 'container \K.+(?= is unhealthy| exited \(\d+\))'
+grep_array() {
+    local input="$1"
+    local rx="$2"
+    local out_var="${3:-REPLY}"
+    local -n out="$out_var"
+    out=()
+    while IFS= read -r name; do
+        [[ -n "$name" ]] && out+=("$name")
+    done < <(echo "$input" | grep -oP "$rx" 2>/dev/null | sort -u || true)
+}
+
+# Wrapper for docker compose.
+# If no arguments are provided, it pulls, builds, ups, detaches, waits for
+# healthy status, and removes orphans.
+# Usage: docker_compose_wrapper <working-dir> <compose-file> [args...]
+docker_compose_wrapper() {
+    local WORKING_DIR="$1"
+    local COMPOSE_FILE="$2"
+    shift; shift
+    local ARGS=("$@")
+    if [ ${#ARGS[@]} -eq 0 ]; then
+        ARGS=(up --pull always --build --detach --wait --remove-orphans --wait-timeout 30)
+    fi
+    local TMP OUTPUT EXIT_CODE
+    TMP="$(mktemp)"
+    trap "rm -f '$TMP'" EXIT
+    docker compose \
+        --project-directory "$WORKING_DIR" \
+        --file "$COMPOSE_FILE" \
+        "${ARGS[@]}" 2> >(tee "$TMP" >&2) || EXIT_CODE=$?
+    EXIT_CODE=${EXIT_CODE:-$?}
+    OUTPUT="$(cat "$TMP")"
+    if [ $EXIT_CODE -ne 0 ]; then
+        log_error "Docker Compose exited with code $EXIT_CODE."
+        echo "$OUTPUT" >&2
+        local CONTAINERS
+        grep_array "$OUTPUT" 'container \K.+(?= is unhealthy| exited \(\d+\))' CONTAINERS
+        if [ ${#CONTAINERS[@]} -gt 0 ]; then
+            log_error "Problem container(s) detected (unhealthy or exited)."
+            for container in "${CONTAINERS[@]}"; do
+                log_info "Logs for $container:"
+                docker logs "$container" --since 2m 2>&1 || true
+            done
+            exit $EXIT_CODE
+        fi
+        exit $EXIT_CODE
+    fi
+    log_info "Docker Compose exited successfully."
 }
