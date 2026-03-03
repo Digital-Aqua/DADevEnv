@@ -10,25 +10,24 @@ YELLOW="\033[33m"
 RED="\033[31m"
 NC="\033[0m"
 
-
 log_h1() {
-    echo -e "${GREEN}============== $1 ==============${NC}"
+    echo -e "${GREEN}============== $1 ==============${NC}" >&${LOGSTREAM:-1}
 }
 
 log_info() {
-    echo -e "${TEAL}$1${NC}"
+    echo -e "${TEAL}$1${NC}" >&${LOGSTREAM:-1}
 }
 
 log_warn() {
-    echo -e "${YELLOW}WARN: $1${NC}"
+    echo -e "${YELLOW}WARN: $1${NC}" >&${LOGSTREAM:-1}
 }
 
 log_error() {
-    echo -e "${RED}ERROR: $1${NC}"
+    echo -e "${RED}ERROR: $1${NC}" >&${LOGSTREAM:-1}   
 }
 
 fail() {
-    log_error "FATAL: ${1:-Error} (${2:-1})"
+    log_error "FATAL: ${1:-Error} (${2:-1})" >&${LOGSTREAM:-1}
     exit "${2:-1}"
 }
 
@@ -123,10 +122,29 @@ grep_array() {
 docker_compose_wrapper() {
     local WORKING_DIR="$1"
     local COMPOSE_FILE="$2"
+    local WAIT_TIMEOUT="${DOCKER_COMPOSE_WAIT_TIMEOUT:-30}"
     shift; shift
     local ARGS=("$@")
+    if [ ${#ARGS[@]} -gt 0 ] && [ "${ARGS[0]}" = "inspect" ]; then
+        local INSPECT_ARGS=("${ARGS[@]:1}")
+        local INSPECT_TARGETS=()
+        local PS_OUTPUT
+        # Inspect all project containers.
+        PS_OUTPUT="$(docker compose \
+            --project-directory "$WORKING_DIR" \
+            --file "$COMPOSE_FILE" \
+            ps -q)" || return $?
+        mapfile -t INSPECT_TARGETS <<< "$PS_OUTPUT"
+
+        if [ ${#INSPECT_TARGETS[@]} -eq 0 ]; then
+            log_warn "No containers found to inspect for $WORKING_DIR."
+            return 0
+        fi
+        docker inspect "${INSPECT_ARGS[@]}" "${INSPECT_TARGETS[@]}"
+        return $?
+    fi
     if [ ${#ARGS[@]} -eq 0 ]; then
-        ARGS=(up --pull always --build --detach --wait --remove-orphans --wait-timeout 30)
+        ARGS=(up --pull always --build --detach --wait --remove-orphans --wait-timeout "$WAIT_TIMEOUT")
     fi
     local TMP OUTPUT EXIT_CODE
     TMP="$(mktemp)"
