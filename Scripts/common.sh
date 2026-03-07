@@ -46,7 +46,9 @@ set_remote() {
             REMOTE_SERVER="$ARG"
         fi
     done
-    if [ -z "$REMOTE_SERVER" ]; then
+    if [ -z "$REMOTE_SERVER" ] || \
+        [ "${REMOTE_SERVERS[$REMOTE_SERVER]}" == "localhost" ]
+    then
         log_info "Working locally."
         REMOTE_SERVER=
         export DOCKER_HOST=
