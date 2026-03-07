@@ -4,7 +4,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPTS="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 PREFIX="${DIR}/.conda"
 
-. "$DIR/Scripts/common.sh"
+. "$SCRIPTS/common.sh"
 
 function ensure_micromamba() {
     if ! command -v micromamba &> /dev/null; then
