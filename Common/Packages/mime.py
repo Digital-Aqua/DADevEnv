@@ -1,5 +1,5 @@
 from dataclasses import dataclass, asdict
-from typing import Annotated, Self
+from typing import Annotated, Any, Self
 
 from mimeparse import parse_mime_type
 
@@ -7,6 +7,8 @@ from mimeparse import parse_mime_type
 __all__ = [
     'MimeType',
     'MimeType_str',
+    'MimeType_TEXT',
+    'MimeTypeColumn',
     'MIME_BINARY',
     'MIME_PLAINTEXT_UTF8',
     'MIME_PLAINTEXT',
@@ -18,6 +20,7 @@ __all__ = [
 
 @dataclass(frozen=True)
 class MimeType:
+    """ A MIME type, split into its components. """
     main_type: str
     sub_type: str
     parameters: dict[str, str]
@@ -25,8 +28,8 @@ class MimeType:
     @classmethod
     def parse(cls, mime_type: str|MimeType) -> Self:
         """
-        Parse a MIME type string or object into a
-        `MimeType` object.
+            Parse a MIME type string or object into a
+            `MimeType` object.
         """
         if isinstance(mime_type, MimeType):
             return cls(**asdict(mime_type))
@@ -43,12 +46,17 @@ class MimeType:
 
     @property
     def mainsubtype(self) -> str:
+        """
+            The main type and subtype combined 
+            (e.g. "text/plain").
+        """
         return f'{self.main_type}/{self.sub_type}'
 
     @property
     def charset(self) -> str|None:
         """
-        Get the charset parameter of the MIME type, if any.
+            Get the charset parameter of the MIME type,
+            if any (e.g. "utf-8").
         """
         return self.parameters.get('charset')
 
@@ -103,7 +111,8 @@ class MimeType:
         parameters: dict[str, str] | None = None,
     ) -> Self:
         """
-        Copy the MIME type with the given parameters updated.
+            Copy the MIME type, updating the
+            specified components.
         """
         main_type = main_type or self.main_type
         sub_type = sub_type or self.sub_type
@@ -129,6 +138,55 @@ else:
     """
         A MIME type backed by a JSON string.
     """
+
+try:
+    from sqlalchemy import (
+        Column, TEXT, TypeDecorator
+    )
+    from sqlalchemy.types import TypeEngine
+except ImportError: pass
+else:
+    class MimeType_TEXT(TypeDecorator[MimeType]):
+        """
+            A SQLAlchemy type representing a MIME type.
+            Backs a `MimeType` with SQL's `TEXT` type.
+        """
+        impl = TEXT
+        cache_ok = True
+        
+        def process_bind_param(self,
+            value: MimeType | None,
+            dialect: Any
+        ) -> str | None:
+            if value is None:
+                return None
+            return str(value)
+        
+        def process_result_value(self,
+            value: str | None,
+            dialect: Any
+        ) -> MimeType | None:
+            if value is None:
+                return None
+            return MimeType.parse(value)
+    
+    def MimeTypeColumn(
+        type_: type[TypeEngine[MimeType]]|TypeEngine[MimeType] \
+            = MimeType_TEXT(),
+        nullable: bool = False,
+        **kwargs
+    ):
+        """
+            A SQLAlchemy column for a MIME type.
+
+            Keyword arguments are passed to SQLAlchemy's
+            `Column` constructor.
+        """
+        return Column[MimeType](
+            type_ = type_,
+            nullable = nullable,
+            **kwargs
+        )
 
 
 MIME_BINARY = MimeType.parse('application/octet-stream')
