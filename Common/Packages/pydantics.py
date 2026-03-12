@@ -1,7 +1,7 @@
 from base64 import b64decode, b64encode
 from typing import (
-    Annotated, Any, BinaryIO, Callable, Literal, Mapping,
-    Self, Sequence, TextIO
+    Annotated, Any, Awaitable, BinaryIO, Callable, Literal,
+    Mapping, Self, Sequence, TextIO, overload
 )
 from uuid import UUID
 
@@ -16,7 +16,7 @@ from pydantic.main import IncEx
 __all__ = [
     'Field', 'Column', 'model_validator',
     'WithModelDefaults', 'WithFrozen',
-    'WithYaml', 'WithSql',
+    'WithYaml', 'WithJObject', 'WithSql',
     'UUID_str', 'UUIDPGColumn', 'UUIDSeqPGColumn',
     'Bytes_b64', 'BytesPGColumn',
     'YamlLoader',
@@ -155,7 +155,20 @@ else:
 
 
 try:
+    from .jsontypes import JObject
+except ImportError: pass
+else:
+    class WithJObject(BaseModel):
+        """ Adds JObject support to a Pydantic model. """
+        def model_dump_jobject(self) -> JObject:
+            """ Dumps the model as a JObject. """
+            return self.model_dump(mode='json')
+
+
+try:
     import sqlmodel
+    from sqlmodel import Session
+    from sqlmodel.ext.asyncio.session import AsyncSession
 except ImportError: pass
 else:
     Field = sqlmodel.Field
@@ -218,14 +231,21 @@ else:
                     raise
             return f"{table_name}.{col_name}"
     
+        @overload
         def sqlmodel_add(self,
-            session: sqlmodel.Session
-        ) -> None:
-            """
-                Adds this model to the session and commits.
+            session: Session
+        ) -> None: ...
+        @overload
+        def sqlmodel_add(self,
+            session: AsyncSession
+        ) -> Awaitable[None]: ...
+        def sqlmodel_add(self,
+            session: Session|AsyncSession
+        ) -> None|Awaitable[None]:
+            """ Adds this model to the session and commits.
             """
             session.add(self)
-            session.commit()
+            return session.commit()
 
 
 def _uuid_from_str(v: UUID | str) -> UUID:

@@ -32,7 +32,7 @@ def implements(
 def assert_implements(
     protocol: type[_TProtocol],
     implementation: type[_TProtocol]
-) -> _TProtocol: pass
+) -> None: pass
 
 def assert_implements2(
     protocol: _TProtocol,
