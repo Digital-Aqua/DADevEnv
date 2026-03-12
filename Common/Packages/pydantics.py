@@ -1,7 +1,7 @@
 from base64 import b64decode, b64encode
 from typing import (
     Annotated, Any, BinaryIO, Callable, Literal, Mapping,
-    Self, TextIO
+    Self, Sequence, TextIO
 )
 from uuid import UUID
 
@@ -14,8 +14,11 @@ from pydantic.main import IncEx
 
 
 __all__ = [
-    'WithFrozen', 'Field', 'model_validator',
-    'UUID_str', 'Bytes_b64',
+    'Field', 'Column', 'model_validator',
+    'WithModelDefaults', 'WithFrozen',
+    'WithYaml', 'WithSql',
+    'UUID_str', 'UUIDPGColumn', 'UUIDSeqPGColumn',
+    'Bytes_b64', 'BytesPGColumn',
     'YamlLoader',
 ]
 
@@ -165,25 +168,46 @@ else:
         @classmethod
         def sqlmodel_col(cls, field: str | Any) -> Any:
             """
-                Get the SQLAlchemy column for a
+                Gets the SQLAlchemy column for a
                 SQLModel field.
             """
             if isinstance(field, str):
-                return getattr(cls, field) \
-                    .property.columns[0]
-            else:
+                return cls.__table__.c[field] # type: ignore[attr-defined]
+            # InstrumentedAttribute has .key and .class_
+            if hasattr(field, 'key') and hasattr(field, 'class_'):
+                return field.class_.__table__.c[field.key]
+            # Column has .name and optionally .table
+            if hasattr(field, 'name'):
+                return field
+            # Legacy: InstrumentedAttribute with .property
+            if hasattr(field, 'property'):
                 return field.property.columns[0]
+            raise AttributeError(
+                f"Cannot get column from {field!r}"
+            )
 
         @classmethod
         def sqlmodel_colname(cls, field: str | Any) -> str:
             """
-                Get the qualified name of the column for a
-                SQLMo`del field, as `<table>.<column>`.
+                Gets the qualified name of the column for a
+                SQLModel field, as `<table>.<column>`.
             """
             try:
                 col = cls.sqlmodel_col(field)
                 col_name = col.name
-                table_name = col.table.name
+                table_name = (
+                    col.table.name
+                    if col.table is not None
+                    else (
+                        getattr(field, 'class_', cls).__tablename__
+                        if not isinstance(field, str)
+                        else getattr(cls, '__tablename__', cls.__name__)
+                    )
+                )
+                if table_name is None:
+                    table_name = getattr(
+                        getattr(field, 'class_', cls), '__name__', 'table'
+                    ).lower()
             except Exception:
                 if isinstance(field, str):
                     col_name = field
@@ -193,6 +217,15 @@ else:
                 else:
                     raise
             return f"{table_name}.{col_name}"
+    
+        def sqlmodel_add(self,
+            session: sqlmodel.Session
+        ) -> None:
+            """
+                Adds this model to the session and commits.
+            """
+            session.add(self)
+            session.commit()
 
 
 def _uuid_from_str(v: UUID | str) -> UUID:
@@ -203,9 +236,54 @@ UUID_str = Annotated[
     BeforeValidator(_uuid_from_str),
     PlainSerializer(str, when_used='json')
 ]
-"""
-    A `uuid.UUID` backed by a JSON string.
-"""
+""" A `uuid.UUID` backed by a JSON string. """
+
+try:
+    from sqlalchemy import Column
+    from sqlalchemy.types import TypeEngine
+    import sqlalchemy.dialects.postgresql as PG
+except ImportError: pass
+else:
+    def UUIDPGColumn(
+        type_: type[TypeEngine[UUID]]|TypeEngine[UUID] \
+            = PG.UUID(),
+        nullable: bool = False,
+        **kwargs
+    ) -> Column[UUID]:
+        """
+            A SQLAlchemy column for a `UUID` object.
+
+            Keyword arguments are passed to SQLAlchemy's
+            `Column` constructor.
+        """
+        return Column[UUID](
+            type_ = type_,
+            nullable = nullable,
+            **kwargs
+        )
+
+    def UUIDSeqPGColumn(
+        type_: type[TypeEngine[Sequence[UUID]]]|TypeEngine[Sequence[UUID]] \
+            = PG.ARRAY(
+                PG.UUID(),
+                dimensions = 1,
+                zero_indexes = False
+            ),
+        nullable: bool = True,
+        **kwargs: Any
+    ) -> Column[Sequence[UUID]]:
+        """
+            A SQLAlchemy column for a sequence of `UUID`
+            objects.
+
+            Keyword arguments are passed to SQLAlchemy's
+            `Column` constructor.
+        """
+        return Column[Sequence[UUID]](
+            type_ = type_,
+            nullable = nullable,
+            **kwargs
+        )
 
 
 def _bytes_from_b64(v: bytes | str) -> bytes:
@@ -218,6 +296,28 @@ Bytes_b64 = Annotated[
     BeforeValidator(_bytes_from_b64),
     PlainSerializer(_bytes_to_b64, when_used='json'),
 ]
-"""
-    A `bytes` object backed by a base64 JSON string.
-"""
+""" A `bytes` object backed by a base64 JSON string. """
+
+try:
+    from sqlalchemy import Column
+    from sqlalchemy.types import TypeEngine
+    import sqlalchemy.dialects.postgresql as PG
+except ImportError: pass
+else:
+    def BytesPGColumn(
+        type_: type[TypeEngine[bytes]]|TypeEngine[bytes] \
+            = PG.BYTEA(),
+        nullable: bool = False,
+        **kwargs
+    ) -> Column[bytes]:
+        """
+            A SQLAlchemy column for a `bytes` object.
+
+            Keyword arguments are passed to SQLAlchemy's
+            `Column` constructor.
+        """
+        return Column[bytes](
+            type_ = type_,
+            nullable = nullable,
+            **kwargs
+        )
