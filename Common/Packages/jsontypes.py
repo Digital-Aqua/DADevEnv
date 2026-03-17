@@ -1,20 +1,33 @@
 from functools import lru_cache
 from types import NoneType
 from typing import (
-    Iterable, TypeAliasType, TypeVar, overload
+    Any, Callable, Iterable, Protocol, TypeAliasType,
+    TypeVar, cast, overload
 )
-
-import jsonpath_ng as jp
-from jsonpath_ng import JSONPath
-
 
 __all__ = [
     'JNull', 'JBool', 'JNumber', 'JString',
     'JArray', 'JObject', 'JValue',
     'J',
-    'JSONPath',
     'JValuePGColumn',
 ]
+
+
+# Type and cache jsonpath_ng
+import jsonpath_ng  # type: ignore[reportMissingTypeStubs]
+class _JpngDatumInContext(Protocol):
+    value: JValue
+class _JpngJSONPath(Protocol):
+    def find(self,
+        value: JValue
+    ) -> Iterable[_JpngDatumInContext]: ...
+
+_jpng_parse = lru_cache(maxsize=4096)(
+    cast(
+        Callable[[str], _JpngJSONPath],
+        jsonpath_ng.parse
+    )
+)
 
 
 _T = TypeVar('_T')
@@ -70,11 +83,6 @@ def _check_jvalue(
     return default
 
 
-@lru_cache(maxsize=4096)
-def _parse_jsonpath(path: str) -> JSONPath:
-    return jp.parse(path)
-
-
 class J():
     """
     Wraps one or more JSON values as a queriable selector.
@@ -89,11 +97,11 @@ class J():
     def __init__(self, *values: JValue):
         self._values = values
     
-    def __call__(self, path: JSONPath|str) -> J:
+    def __call__(self, path: str) -> J:
         return J(*(
             result.value
             for value in self._values
-            for result in _parse_jsonpath(path).find(value)
+            for result in _jpng_parse(path).find(value)
         ))
 
     def __iter__(self) -> Iterable[J]:
@@ -377,7 +385,7 @@ class J():
         if not self._values \
             and not isinstance(default, _Raise):
                return default
-        return _check_jvalue(self._value(), list, default)
+        return _check_jvalue(self._value(), JArray, default)
 
     @overload
     def obj(self) -> JObject: ...
@@ -395,7 +403,7 @@ class J():
         if not self._values \
             and not isinstance(default, _Raise):
                return default
-        return _check_jvalue(self._value(), dict, default)
+        return _check_jvalue(self._value(), JObject, default)
 
 
 try:
@@ -408,7 +416,7 @@ else:
         type_: type[TypeEngine[JValue]]|TypeEngine[JValue] \
             = PG.JSONB(),
         nullable: bool = False,
-        **kwargs
+        **kwargs: Any
     ) -> Column[JValue]:
         """
         A SQLAlchemy column for a JSON value.

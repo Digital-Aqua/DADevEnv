@@ -3,7 +3,7 @@ from typing import (
     Annotated, Any, Awaitable, BinaryIO, Callable, Literal,
     Mapping, Self, Sequence, TextIO, overload
 )
-from uuid import UUID
+from uuid import UUID, uuid5
 
 from pydantic import (
     BaseModel, ConfigDict, Field, model_validator,
@@ -27,21 +27,63 @@ _InfFloat = float
 
 
 class WithModelDefaults(BaseModel):
-    """
-        Applies the usual defaults for a Pydantic model.
-    """
+    """ Applies the usual defaults for a Pydantic model. """
     model_config = ConfigDict(
         use_attribute_docstrings=True
     )
 
 
 class WithFrozen(BaseModel):
-    """
-        Freezes a Pydantic model.
-    """
+    """ Freezes a Pydantic model. """
     model_config = ConfigDict(
         frozen=True
     )
+
+
+# class WithFreeze(BaseModel):
+#     """ Adds freezing to a Pydantic model. """
+
+#     @classmethod
+#     def __pydantic_init_subclass__(cls, **kwargs):
+#         super().__pydantic_init_subclass__(**kwargs)
+
+#         # Check if the class is already frozen
+#         if not (getattr(cls, 'model_config', None)
+#             and getattr(cls.model_config, 'frozen', False)
+#         ):
+#             class _Frozen(cls, WithFrozen): pass
+#             _Frozen.__name__ = f"Frozen{cls.__name__}"
+#             _Frozen.__qualname__ = f"Frozen{cls.__qualname__}"
+#             _Frozen.__doc__ = cls.__doc__
+#             cls._frozen_cls = _Frozen
+#         else:
+#             cls._frozen_cls = cls
+
+#     def model_freeze(self) -> Self:
+#         frozen = self._frozen_cls().model_validate(self)
+#         return frozen  # type: ignore
+
+
+_HASH_SALT = UUID('2c9e7dc5-d69b-4f8a-815e-53a47883b624')
+class WithHashUuid(BaseModel):
+    """ Adds a UUID hash to a model based on its canonical
+        JSON representation.
+    """
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        cls._class_hash_salt = uuid5(
+            _HASH_SALT, cls.__qualname__
+        )
+
+    def hash_uuid(self) -> UUID:
+        """ Returns the a hash for the model's canonical
+            JSON representation as a UUID.
+        """
+        return uuid5(
+            self._class_hash_salt,
+            self.model_dump_json()
+        )
 
 
 try:
