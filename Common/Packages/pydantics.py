@@ -17,13 +17,27 @@ __all__ = [
     'Field', 'Column', 'model_validator',
     'WithModelDefaults', 'WithFrozen',
     'WithYaml', 'WithJObject', 'WithSql',
-    'UUID_str', 'UUIDPGColumn', 'UUIDSeqPGColumn',
     'Bytes_b64', 'BytesPGColumn',
+    'JValuePGColumn', 'UUID_str', 'UUIDSeqPGColumn',
     'YamlLoader',
 ]
 
 
 _InfFloat = float
+
+
+def _uuid_from_str(v: UUID | str) -> UUID:
+    if isinstance(v, UUID):
+        return v
+    return UUID(str(v))
+
+
+UUID_str = Annotated[
+    UUID,
+    BeforeValidator(_uuid_from_str),
+    PlainSerializer(str, when_used='json'),
+]
+""" A `uuid.UUID` backed by a JSON string. """
 
 
 class WithModelDefaults(BaseModel):
@@ -273,79 +287,79 @@ else:
                     raise
             return f"{table_name}.{col_name}"
     
-        @overload
-        def sqlmodel_add(self,
-            session: Session
-        ) -> None: ...
-        @overload
-        def sqlmodel_add(self,
-            session: AsyncSession
-        ) -> Awaitable[None]: ...
-        def sqlmodel_add(self,
-            session: Session|AsyncSession
-        ) -> None|Awaitable[None]:
-            """ Adds this model to the session and commits.
-            """
-            session.add(self)
-            return session.commit()
+        # @overload
+        # def sqlmodel_add(self,
+        #     session: Session
+        # ) -> None: ...
+        # @overload
+        # def sqlmodel_add(self,
+        #     session: AsyncSession
+        # ) -> Awaitable[None]: ...
+        # def sqlmodel_add(self,
+        #     session: Session|AsyncSession
+        # ) -> None|Awaitable[None]:
+        #     """ Adds this model to the session and commits.
+        #     """
+        #     session.add(self)
+        #     return session.commit()
 
 
-def _uuid_from_str(v: UUID | str) -> UUID:
-    if isinstance(v, UUID): return v
-    return UUID(str(v))
-UUID_str = Annotated[
-    UUID,
-    BeforeValidator(_uuid_from_str),
-    PlainSerializer(str, when_used='json')
-]
-""" A `uuid.UUID` backed by a JSON string. """
+# def _uuid_from_str(v: UUID | str) -> UUID:
+#     if isinstance(v, UUID): return v
+#     return UUID(str(v))
+# UUID_str = Annotated[
+#     UUID,
+#     BeforeValidator(_uuid_from_str),
+#     PlainSerializer(str, when_used='json')
+# ]
+# """ A `uuid.UUID` backed by a JSON string. """
 
-try:
-    from sqlalchemy import Column
-    from sqlalchemy.types import TypeEngine
-    import sqlalchemy.dialects.postgresql as PG
-except ImportError: pass
-else:
-    def UUIDPGColumn(
-        type_: type[TypeEngine[UUID]]|TypeEngine[UUID] \
-            = PG.UUID(),
-        nullable: bool = False,
-        **kwargs
-    ) -> Column[UUID]:
-        """
-            A SQLAlchemy column for a `UUID` object.
+# try:
+#     from sqlalchemy import Column
+#     from sqlalchemy.types import TypeEngine
+#     import sqlalchemy.dialects.postgresql as PG
+# except ImportError: pass
+# else:
+#     def UUIDPGColumn(
+#         type_: type[TypeEngine[UUID]]|TypeEngine[UUID] \
+#             = PG.UUID(),
+#         nullable: bool = False,
+#         **kwargs: Any
+#     ) -> Column[UUID]:
+#         """
+#             A SQLAlchemy column for a `UUID` object.
 
-            Keyword arguments are passed to SQLAlchemy's
-            `Column` constructor.
-        """
-        return Column[UUID](
-            type_ = type_,
-            nullable = nullable,
-            **kwargs
-        )
+#             Keyword arguments are passed to SQLAlchemy's
+#             `Column` constructor.
+#         """
+#         return Column[UUID](
+#             type_ = type_,
+#             nullable = nullable,
+#             **kwargs
+#         )
 
-    def UUIDSeqPGColumn(
-        type_: type[TypeEngine[Sequence[UUID]]]|TypeEngine[Sequence[UUID]] \
-            = PG.ARRAY(
-                PG.UUID(),
-                dimensions = 1,
-                zero_indexes = False
-            ),
-        nullable: bool = True,
-        **kwargs: Any
-    ) -> Column[Sequence[UUID]]:
-        """
-            A SQLAlchemy column for a sequence of `UUID`
-            objects.
+#     def UUIDSeqPGColumn(
+#         type_: type[TypeEngine[Sequence[UUID]]]|TypeEngine[Sequence[UUID]] \
+#             = PG.ARRAY(
+#                 PG.UUID(),
+#                 dimensions = 1,
+#                 zero_indexes = False
+#             ),
+#         nullable: bool = True,
+#         **kwargs: Any
+#     ) -> Column[Sequence[UUID]]:
+#         """
+#             A SQLAlchemy column for a sequence of `UUID`
+#             objects.
 
-            Keyword arguments are passed to SQLAlchemy's
-            `Column` constructor.
-        """
-        return Column[Sequence[UUID]](
-            type_ = type_,
-            nullable = nullable,
-            **kwargs
-        )
+#             Keyword arguments are passed to SQLAlchemy's
+#             `Column` constructor.
+#         """
+#         return Column[Sequence[UUID]](
+#             type_ = type_,
+#             nullable = nullable,
+#             **kwargs
+#         )
 
 
 def _bytes_from_b64(v: bytes | str) -> bytes:
@@ -382,4 +396,26 @@ else:
             type_ = type_,
             nullable = nullable,
             **kwargs
+        )
+
+    def JValuePGColumn(
+        nullable: bool = False,
+        **kwargs: Any,
+    ) -> Column[Any]:
+        """ A PostgreSQL `JSONB` column for a `JValue`. """
+        return Column(PG.JSONB(), nullable=nullable, **kwargs)
+
+    def UUIDSeqPGColumn(
+        nullable: bool = True,
+        **kwargs: Any,
+    ) -> Column[Any]:
+        """ A PostgreSQL column for a 1-D array of UUIDs. """
+        return Column(
+            PG.ARRAY(
+                PG.UUID(as_uuid=True),
+                dimensions=1,
+                zero_indexes=False,
+            ),
+            nullable=nullable,
+            **kwargs,
         )

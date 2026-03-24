@@ -1,15 +1,14 @@
 from functools import lru_cache
 from types import NoneType
 from typing import (
-    Any, Callable, Iterable, Protocol, TypeAliasType,
+    Callable, Iterable, Protocol, TypeAliasType,
     TypeVar, cast, overload
 )
 
 __all__ = [
     'JNull', 'JBool', 'JNumber', 'JString',
     'JArray', 'JObject', 'JValue',
-    'J',
-    'JValuePGColumn',
+    'J'
 ]
 
 
@@ -404,28 +403,3 @@ class J():
             and not isinstance(default, _Raise):
                return default
         return _check_jvalue(self._value(), JObject, default)
-
-
-try:
-    from sqlalchemy import Column
-    from sqlalchemy.types import TypeEngine
-    import sqlalchemy.dialects.postgresql as PG
-except ImportError: pass
-else:
-    def JValuePGColumn(
-        type_: type[TypeEngine[JValue]]|TypeEngine[JValue] \
-            = PG.JSONB(),
-        nullable: bool = False,
-        **kwargs: Any
-    ) -> Column[JValue]:
-        """
-        A SQLAlchemy column for a JSON value.
-
-        Keyword arguments are passed to SQLAlchemy's
-        `Column` constructor.
-        """
-        return Column[JValue](
-            type_ = type_,
-            nullable = nullable,
-            **kwargs
-        )
