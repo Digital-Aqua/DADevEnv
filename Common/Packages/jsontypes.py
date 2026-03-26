@@ -1,9 +1,16 @@
+import json
 from functools import lru_cache
+from io import StringIO, TextIOWrapper
 from types import NoneType
 from typing import (
-    Callable, Iterable, Protocol, TypeAliasType,
-    TypeVar, cast, overload
+    BinaryIO, TextIO,
+    Any, Callable, Iterable, Literal, Mapping, Protocol, Self,
+    TypeAliasType, TypeVar,
+    cast, overload
 )
+
+import jsonpath_ng  # type: ignore[reportMissingTypeStubs]
+
 
 __all__ = [
     'JNull', 'JBool', 'JNumber', 'JString',
@@ -13,7 +20,6 @@ __all__ = [
 
 
 # Type and cache jsonpath_ng
-import jsonpath_ng  # type: ignore[reportMissingTypeStubs]
 class _JpngDatumInContext(Protocol):
     value: JValue
 class _JpngJSONPath(Protocol):
@@ -62,8 +68,7 @@ def _check_jvalue(
     expected: type[_TJValue],
     default: _T|_Raise = _RAISE
 ) -> _TJValue|_T:
-    """
-        Checks if the value is of the expected type.
+    """ Checks if the value is of the expected type.
         If the value is of the expected type, returns it.
 
         If the value is not of the expected type,
@@ -83,14 +88,13 @@ def _check_jvalue(
 
 
 class J():
-    """
-    Wraps one or more JSON values as a queriable selector.
+    """ Wraps one or more JSON values as a queriable selector.
 
-    Example:
-    ```python
-    j = J([1, dict(a=2), [3, '4']])
-    print(j('.[0]'))  # 1
-    print(j('.[2][1]'))  # '4'
+        Example:
+        ```python
+        j = J([1, dict(a=2), [3, '4']])
+        print(j('.[0]'))  # 1
+        print(j('.[2][1]'))  # '4'
     ```
     """
     def __init__(self, *values: JValue):
@@ -126,8 +130,7 @@ class J():
         )
 
     def values(self) -> Iterable[JValue]:
-        """
-        Yields the wrapped values.
+        """ Yields the wrapped values.
         """
         yield from self._values
 
@@ -138,11 +141,10 @@ class J():
     def nulls(self,
         default: _T|_Raise = _RAISE
     ) -> Iterable[JNull|_T]:
-        """
-        Yields the wrapped null values.
+        """ Yields the wrapped null values.
 
-        If a non-null value is found, returns `default`
-        if provided, otherwise raises `ValueError`.
+            If a non-null value is found, returns `default`
+            if provided, otherwise raises `ValueError`.
         """
         for value in self._values:
             yield _check_jvalue(value, NoneType, default)
@@ -154,11 +156,11 @@ class J():
     def bools(self,
         default: _T|_Raise = _RAISE
     ) -> Iterable[JBool|_T]:
-        """
-        Yields the wrapped boolean values.
+        """ Yields the wrapped boolean values.
 
-        If a non-boolean value is found, returns `default`
-        if provided, otherwise raises `ValueError`.
+            If a non-boolean value is found, returns
+            `default` if provided, otherwise raises
+            `ValueError`.
         """
         for value in self._values:
             yield _check_jvalue(value, bool, default)
@@ -170,11 +172,11 @@ class J():
     def ints(self,
         default: _T|_Raise = _RAISE
     ) -> Iterable[int|_T]:
-        """
-        Yields the wrapped integer values.
+        """ Yields the wrapped integer values.
 
-        If a non-integer value is found, returns `default`
-        if provided, otherwise raises `ValueError`.
+            If a non-integer value is found, returns
+            `default` if provided, otherwise raises
+            `ValueError`.
         """
         for value in self._values:
             yield _check_jvalue(value, int, default)
@@ -186,11 +188,11 @@ class J():
     def floats(self,
         default: _T|_Raise = _RAISE
     ) -> Iterable[float|_T]:
-        """
-        Yields the wrapped float values.
+        """ Yields the wrapped float values.
 
-        If a non-float value is found, returns `default`
-        if provided, otherwise raises `ValueError`.
+            If a non-float value is found, returns
+            `default` if provided, otherwise raises
+            `ValueError`.
         """
         for value in self._values:
             yield _check_jvalue(value, float, default)
@@ -202,11 +204,11 @@ class J():
     def strs(self,
         default: _T|_Raise = _RAISE
     ) -> Iterable[str|_T]:
-        """
-        Yields the wrapped string values.
+        """ Yields the wrapped string values.
 
-        If a non-string value is found, returns `default`
-        if provided, otherwise raises `ValueError`.
+            If a non-string value is found, returns
+            `default` if provided, otherwise raises
+            `ValueError`.
         """
         for value in self._values:
             yield _check_jvalue(value, str, default)
@@ -218,11 +220,11 @@ class J():
     def arrs(self,
         default: _T|_Raise = _RAISE
     ) -> Iterable[JArray|_T]:
-        """
-        Yields the wrapped array values.
+        """ Yields the wrapped array values.
 
-        If a non-array value is found, returns `default`
-        if provided, otherwise raises `ValueError`.
+            If a non-array value is found, returns
+            `default` if provided, otherwise raises
+            `ValueError`.
         """
         for value in self._values:
             yield _check_jvalue(value, list, default)
@@ -234,11 +236,11 @@ class J():
     def objs(self,
         default: _T|_Raise = _RAISE
     ) -> Iterable[JObject|_T]:
-        """
-        Yields the wrapped object values.
+        """Yields the wrapped object values.
 
-        If a non-object value is found, returns `default`
-        if provided, otherwise raises `ValueError`.
+            If a non-object value is found, returns
+            `default` if provided, otherwise raises
+            `ValueError`.
         """
         for value in self._values:
             yield _check_jvalue(value, dict, default)
@@ -250,13 +252,12 @@ class J():
     def value(self,
         default: _T|_Raise = _RAISE
     ) -> JValue|_T:
-        """
-        Returns the single wrapped value.
+        """ Returns the single wrapped value.
 
-        If there are no values, returns `default` if
-        provided, otherwise raises `ValueError`.
-        If there are multiple values, always raises
-        `ValueError`.
+            If there are no values, returns `default` if
+            provided, otherwise raises `ValueError`.
+            If there are multiple values, always raises
+            `ValueError`.
         """
         return self._value(default)
     def _value(self,
@@ -279,13 +280,12 @@ class J():
     @overload
     def null(self, default: _T) -> JNull|_T: ...
     def null(self, default: _T|_Raise = _RAISE) -> JNull|_T:
-        """
-        Returns the single wrapped null value.
+        """ Returns the single wrapped null value.
 
-        If there are no null values, returns `default` if
-        provided, otherwise raises `ValueError`.
-        If there are multiple null values, always raises
-        `ValueError`.
+            If there are no null values, returns `default`
+            if provided, otherwise raises `ValueError`.
+            If there are multiple null values, always
+            raises `ValueError`.
         """
         if not self._values \
             and not isinstance(default, _Raise):
@@ -297,13 +297,13 @@ class J():
     @overload
     def bool(self, default: _T) -> JBool|_T: ...
     def bool(self, default: _T|_Raise = _RAISE ) -> JBool|_T:
-        """
-        Returns the single wrapped boolean value.
+        """ Returns the single wrapped boolean value.
 
-        If there are no boolean values, returns `default` if
-        provided, otherwise raises `ValueError`.
-        If there are multiple boolean values, always raises
-        `ValueError`.
+            If there are no boolean values, returns
+            `default` if provided, otherwise raises
+            `ValueError`.
+            If there are multiple boolean values, always
+            raises`ValueError`.
         """
         if not self._values \
             and not isinstance(default, _Raise):
@@ -315,13 +315,13 @@ class J():
     @overload
     def int(self, default: _T) -> int|_T: ...
     def int(self, default: _T|_Raise = _RAISE) -> int|_T:
-        """
-        Returns the single wrapped integer value.
+        """ Returns the single wrapped integer value.
 
-        If there are no integer values, returns `default` if
-        provided, otherwise raises `ValueError`.
-        If there are multiple integer values, always raises
-        `ValueError`.
+            If there are no integer values, returns
+            `default` if provided, otherwise raises
+            `ValueError`.
+            If there are multiple integer values, always
+            raises `ValueError`.
         """
         if not self._values \
             and not isinstance(default, _Raise):
@@ -336,13 +336,12 @@ class J():
     @overload
     def float(self, default: _T) -> float|_T: ...
     def float(self, default: _T|_Raise = _RAISE) -> float|_T:
-        """
-        Returns the single wrapped float value.
+        """ Returns the single wrapped float value.
 
-        If there are no float values, returns `default` if
-        provided, otherwise raises `ValueError`.
-        If there are multiple float values, always raises
-        `ValueError`.
+            If there are no float values, returns `default`
+            if provided, otherwise raises `ValueError`.
+            If there are multiple float values, always
+            raises `ValueError`.
         """
         if not self._values \
             and not isinstance(default, _Raise):
@@ -355,13 +354,12 @@ class J():
     @overload
     def str(self, default: _T) -> JString|_T: ...
     def str(self, default: _T|_Raise = _RAISE) -> JString|_T:
-        """
-        Returns the single wrapped string value.
+        """ Returns the single wrapped string value.
 
-        If there are no string values, returns `default` if
-        provided, otherwise raises `ValueError`.
-        If there are multiple string values, always raises
-        `ValueError`.
+            If there are no string values, returns `default`
+            if provided, otherwise raises `ValueError`.
+            If there are multiple string values, always
+            raises `ValueError`.
         """
         if not self._values \
             and not isinstance(default, _Raise):
@@ -373,13 +371,12 @@ class J():
     @overload
     def arr(self, default: _T) -> JArray|_T: ...
     def arr(self, default: _T|_Raise = _RAISE) -> JArray|_T:
-        """
-        Returns the single wrapped array value.
+        """ Returns the single wrapped array value.
 
-        If there are no array values, returns `default` if
-        provided, otherwise raises `ValueError`.
-        If there are multiple array values, always raises
-        `ValueError`.
+            If there are no array values, returns `default`
+            if provided, otherwise raises `ValueError`.
+            If there are multiple array values, always
+            raises `ValueError`.
         """
         if not self._values \
             and not isinstance(default, _Raise):
@@ -391,15 +388,173 @@ class J():
     @overload
     def obj(self, default: _T) -> JObject|_T: ...
     def obj(self, default: _T|_Raise = _RAISE) -> JObject|_T:
-        """
-        Returns the single wrapped object value.
+        """ Returns the single wrapped object value.
 
-        If there are no object values, returns `default` if
-        provided, otherwise raises `ValueError`.
-        If there are multiple object values, always raises
-        `ValueError`.
+            If there are no object values, returns `default` if
+            provided, otherwise raises `ValueError`.
+            If there are multiple object values, always raises
+            `ValueError`.
         """
         if not self._values \
             and not isinstance(default, _Raise):
                return default
         return _check_jvalue(self._value(), JObject, default)
+
+    @overload
+    def value_typed(self,
+        t: type[_TJValue]
+    ) -> _TJValue: ...
+    @overload
+    def value_typed(self,
+        t: type[_TJValue],
+        default: _T|_Raise = _RAISE
+    ) -> _TJValue|_T:
+        ...
+    def value_typed(self,
+        t: type[_TJValue],
+        default: _T|_Raise = _RAISE
+    ) -> _TJValue|_T:
+        """ Returns the single wrapped value as the given
+            variable type.
+
+            If there are no values, returns `default` if
+            provided, otherwise raises `ValueError`.
+            If there are multiple values, always raises
+            `ValueError`.
+        """
+        if not self._values \
+            and not isinstance(default, _Raise):
+               return default
+        if t is NoneType:
+            return self.null(default)   # type: ignore
+        if t is bool:
+            return self.bool(default)   # type: ignore
+        if t is int:
+            return self.int(default)    # type: ignore
+        if t is float:
+            return self.float(default)  # type: ignore
+        if t is str:
+            return self.str(default)    # type: ignore
+        if t is list:
+            return self.arr(default)    # type: ignore
+        if t is dict:
+            return self.obj(default)    # type: ignore
+        raise ValueError(
+            f"Unsupported type: {t.__name__}"
+        )
+
+    @overload
+    def to_json(self,
+        *,
+        indent: int|None = None
+    ) -> str: ...
+    @overload
+    def to_json(self,
+        stream: BinaryIO|TextIO,
+        *,
+        indent: int|None = None
+    ) -> None: ...
+    def to_json(self,
+        stream: BinaryIO|TextIO|None = None,
+        *,
+        indent: int|None = None
+    ) -> str|None:
+        """ Dumps the wrapped value as JSON.
+            
+            If `indent` is provided, the JSON will be
+            indented with the given number of spaces.
+            If `indent` is not provided, the JSON will
+            be dumped without indentation and without
+            whitespace.
+        """
+        if stream is None:
+            with StringIO() as buffer:
+                self.to_json(buffer, indent=indent)
+                return buffer.getvalue()
+        if isinstance(stream, BinaryIO):
+            wrapper = TextIOWrapper(
+                buffer = stream,
+                encoding = 'utf-8'
+            )
+            return self.to_json(wrapper, indent=indent)
+        json.dump(
+            obj = self._value(),
+            fp = stream,
+            indent = indent,
+            separators = None if indent else (',', ':')
+        )
+        return None
+    
+    @classmethod
+    def from_json(cls,
+        data: str|bytes|TextIO|BinaryIO
+    ) -> Self:
+        """ Loads the wrapped value from JSON. """
+        if isinstance(data, (str|bytes)):
+            return cls(json.loads(data))
+        return cls(json.load(data))
+
+    @overload
+    def to_yaml(self, *,
+        indent: int|None = None
+    ) -> str: ...
+    @overload
+    def to_yaml(self,
+        stream: BinaryIO|TextIO,
+        *,
+        indent: int|None = None,
+        width: int|None = None
+    ) -> None: ...
+    def to_yaml(self,
+        stream: BinaryIO|TextIO|None = None,
+        *,
+        indent: int|None = None,
+        width: int|None = None
+    ) -> str|None:
+        """ Dumps the wrapped value as YAML.
+
+            Passes `indent` and `width` to `yaml.dump`.
+        """
+        try:
+            import yaml
+        except ImportError:
+            raise ImportError(
+                "PyYAML is not installed. "
+                "Try `pip install PyYAML`."
+            )
+        if stream is None:
+            with StringIO() as buffer:
+                self.to_yaml(buffer,
+                    indent = indent,
+                    width = width
+                )
+                return buffer.getvalue()
+        yaml.dump(
+            data = self._value(),
+            stream = stream,
+            indent = indent,
+            width = width
+        )
+        return None
+
+    @classmethod
+    def from_yaml(cls,
+        data: str|bytes|TextIO|BinaryIO,
+        loader: Literal['full', 'safe', 'unsafe'] = 'full'
+    ) -> Self:
+        """ Loads the wrapped value from YAML. """
+        try:
+            import yaml
+        except ImportError:
+            raise ImportError(
+                "PyYAML is not installed. "
+                "Try `pip install PyYAML`."
+            )
+        return cls(yaml.load(
+            stream = data,
+            Loader = {
+                'full': yaml.FullLoader,
+                'safe': yaml.SafeLoader,
+                'unsafe': yaml.UnsafeLoader,
+            }[loader]
+        ))
