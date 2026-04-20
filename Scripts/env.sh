@@ -2,7 +2,7 @@
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPTS="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
-PREFIX="${DIR}/.conda"
+PREFIX="${DIR}/.micromamba"
 
 . "$SCRIPTS/common.sh"
 
@@ -67,7 +67,7 @@ function copy_watches() {
 function main() {
     # Load micromamba into shell
     ensure_micromamba
-    eval "$(micromamba shell hook --shell bash)"
+    set +u; eval "$(micromamba shell hook --shell bash)"; set -u
 
     # Check the prefix is up-to-date
     ensure_prefix
@@ -94,3 +94,4 @@ function main() {
 }
 
 main "$@"
+set +e
