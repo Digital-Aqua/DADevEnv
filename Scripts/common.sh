@@ -52,9 +52,12 @@ set_remote() {
         log_info "Working locally."
         REMOTE_SERVER=
         export DOCKER_HOST=
+        unset DOCKER_SSH_OPTS 2>/dev/null || true
         return
     fi
     export DOCKER_HOST="ssh://${REMOTE_USERS[$REMOTE_SERVER]}@${REMOTE_SERVERS[$REMOTE_SERVER]}"
+    # Bound connect time for dead docker SSH endpoints; BatchMode avoids hung password prompts.
+    export DOCKER_SSH_OPTS="${DOCKER_SSH_OPTS:--o ConnectTimeout=5 -o BatchMode=yes}"
     if [ -n "$SKIP_CHECK" ]; then
         TOKEN="$RANDOM"
         ssh_ "echo $TOKEN" \
