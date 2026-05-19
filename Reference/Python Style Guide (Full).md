@@ -384,7 +384,7 @@ class DataProcessor(ProcessorBase):
 from typing import Protocol
 
 class Animal(Protocol):
-    """Contract for animal-like objects."""
+    """ Contract for animal-like objects. """
     
     @property
     def name(self) -> str: ...
@@ -443,7 +443,7 @@ For complex or slow computations, encapsulate inputs in a class and use lazy pro
 from functools import cache
 
 class DataAnalysis:
-    """Encapsulates analysis inputs with lazy computation."""
+    """ Encapsulates analysis inputs with lazy computation. """
     
     def __init__(self, raw_data: list[float]):
         self._raw_data = raw_data
@@ -451,19 +451,19 @@ class DataAnalysis:
     @property
     @cache
     def cleaned_data(self) -> list[float]:
-        """First step: clean data."""
+        """ First step: clean data. """
         return [x for x in self._raw_data if x > 0]
     
     @property
     @cache
     def mean(self) -> float:
-        """Depends on cleaned_data."""
+        """ Depends on cleaned_data. """
         return sum(self.cleaned_data) / len(self.cleaned_data)
     
     @property
     @cache
     def variance(self) -> float:
-        """Depends on cleaned_data and mean."""
+        """ Depends on cleaned_data and mean. """
         mean = self.mean
         return sum(
             (x - mean) ** 2 for x in self.cleaned_data
@@ -484,7 +484,7 @@ class DataAnalysis:
 from pydantic import BaseModel
 
 class UserData(BaseModel):
-    """Pure data - immutable."""
+    """ Pure data - immutable. """
     model_config = {'frozen': True}
     
     user_id: str
@@ -496,7 +496,7 @@ class UserData(BaseModel):
 
 ```python
 class RequestContext:
-    """Runtime context - mutable as needed."""
+    """ Runtime context - mutable as needed. """
     
     def __init__(
         self,
@@ -581,11 +581,11 @@ Create custom exception classes for domain-specific errors:
 
 ```python
 class ValidationError(Exception):
-    """Raised when data validation fails."""
+    """ Raised when data validation fails. """
     pass
 
 class ConfigurationError(Exception):
-    """Raised when configuration is invalid."""
+    """ Raised when configuration is invalid. """
     pass
 ```
 
@@ -779,7 +779,7 @@ When you need to "modify" immutable data:
 
 ```python
 def update_event(event: Event, new_data: dict[str, Any]) -> Event:
-    """Return new event with updated data."""
+    """ Return new event with updated data. """
     return event.model_copy(update={'data': new_data})
 ```
 
@@ -866,7 +866,7 @@ Define async at the protocol level when implementations may need to be external 
 ```python
 class DataSource(Protocol):
     async def fetch(self) -> list[Record]:
-        """Fetch data - may be network call or local."""
+        """ Fetch data - may be network call or local. """
         ...
 
 # Implementation might be sync internally but matches protocol
@@ -917,7 +917,7 @@ def process_file(path: Path) -> None:
 
 ```python
 async def watch_file(path: Path) -> AsyncIterable[str]:
-    """Yield file contents whenever it changes."""
+    """ Yield file contents whenever it changes. """
     last_modified = path.stat().st_mtime
     
     while True:
@@ -991,15 +991,15 @@ from .lion import LionAnimal
     ids=['elephant', 'lion']
 )
 def animal(request) -> Animal:
-    """Test with all Animal implementations."""
+    """ Test with all Animal implementations. """
     return request.param('Test')
 
 def test_animal_has_name(animal: Animal):
-    """All animals must have a name."""
+    """ All animals must have a name. """
     assert animal.name == 'Test'
 
 def test_animal_makes_sound(animal: Animal):
-    """All animals must make a sound."""
+    """ All animals must make a sound. """
     sound = animal.make_sound()
     assert isinstance(sound, str)
     assert len(sound) > 0
@@ -1061,7 +1061,7 @@ Use pytest with clear test organization:
 
 ```python
 class TestDataProcessor:
-    """Tests for DataProcessor class."""
+    """ Tests for DataProcessor class. """
     
     @pytest.fixture
     def processor(self) -> DataProcessor:
@@ -1087,7 +1087,7 @@ import subprocess
 import pytest
 
 def test_type_checking():
-    """Run pyright to ensure type correctness."""
+    """ Run pyright to ensure type correctness. """
     result = subprocess.run(
         ['pyright', '.'],
         capture_output=True,
@@ -1108,12 +1108,27 @@ def test_type_checking():
 
 Use Google-style docstrings for all public members and members intended to be overridden:
 
+**Docstring spacing:**
+
+```python
+""" Short single-line docstring. """
+```
+
+```python
+""" Long docstring ...
+    ... with multiple lines.
+"""
+```
+
+- **Single-line:** Space after opening ` """ `, space before closing ` """ `.
+- **Multi-line:** Opening ` """ ` with text on the first line; continuation lines indented; closing ` """ ` on its own line.
+
 ```python
 def process_data(
     data: list[str],
     config: Config | None = None
 ) -> list[Result]:
-    """Process data according to configuration.
+    """ Process data according to configuration.
     
     Transforms input data using the provided configuration
     settings. If no config is provided, uses defaults.
@@ -1153,7 +1168,7 @@ def process_data(
 Start each module with a docstring:
 
 ```python
-"""Data processing utilities.
+""" Data processing utilities.
 
 This module provides classes and functions for processing
 data records, including validation, transformation, and
@@ -1168,7 +1183,7 @@ Don't duplicate type information:
 ```python
 # Good - types in signature, explanation in docstring
 def calculate(value: float, rate: float) -> float:
-    """Calculate result using the given rate.
+    """ Calculate result using the given rate.
     
     Args:
         value: The base value.
@@ -1180,7 +1195,7 @@ def calculate(value: float, rate: float) -> float:
 
 # Avoid - redundant type info
 def calculate(value: float, rate: float) -> float:
-    """Calculate result using the given rate.
+    """ Calculate result using the given rate.
     
     Args:
         value (float): The base value.
@@ -1412,14 +1427,14 @@ What is the type of x?
 from typing import Protocol
 
 class Storage(Protocol):
-    """Contract for storage backends."""
+    """ Contract for storage backends. """
     
     async def save(self, key: str, data: bytes) -> None:
-        """Save data under key."""
+        """ Save data under key. """
         ...
     
     async def load(self, key: str) -> bytes:
-        """Load data for key."""
+        """ Load data for key. """
         ...
 
 # storage/base.py
@@ -1427,14 +1442,14 @@ from abc import ABC, abstractmethod
 import logging
 
 class StorageBase(ABC):
-    """Base implementation with common functionality."""
+    """ Base implementation with common functionality. """
     
     def __init__(self, prefix: str):
         self.prefix = prefix
         self._log = logging.getLogger()
     
     def _full_key(self, key: str) -> str:
-        """Add prefix to key."""
+        """ Add prefix to key. """
         return f"{self.prefix}:{key}"
     
     @abstractmethod
@@ -1447,14 +1462,14 @@ class StorageBase(ABC):
 
 # storage/caching.py
 class CachingMixin(StorageBase, ABC):
-    """Adds caching capability."""
+    """ Adds caching capability. """
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._cache: dict[str, bytes] = {}
     
     async def load(self, key: str) -> bytes:
-        """Load with caching."""
+        """ Load with caching. """
         full_key = self._full_key(key)
         
         if full_key in self._cache:
@@ -1468,14 +1483,14 @@ class CachingMixin(StorageBase, ABC):
     
     @abstractmethod
     async def _load_impl(self, full_key: str) -> bytes:
-        """Actual load implementation."""
+        """ Actual load implementation. """
         ...
 
 # storage/file.py
 from pathlib import Path
 
 class FileStorage(CachingMixin, StorageBase):
-    """File-based storage with caching."""
+    """ File-based storage with caching. """
     
     def __init__(self, base_dir: Path, prefix: str = ''):
         super().__init__(prefix)
@@ -1501,7 +1516,7 @@ from pathlib import Path
 import re
 
 class TextAnalysis:
-    """Analyze text file with lazy computation."""
+    """ Analyze text file with lazy computation. """
     
     def __init__(self, path: Path):
         self.path = path
@@ -1509,37 +1524,37 @@ class TextAnalysis:
     @property
     @cache
     def raw_text(self) -> str:
-        """Load text from file."""
+        """ Load text from file. """
         return self.path.read_text()
     
     @property
     @cache
     def lines(self) -> list[str]:
-        """Split into lines."""
+        """ Split into lines. """
         return self.raw_text.splitlines()
     
     @property
     @cache
     def words(self) -> list[str]:
-        """Extract words (depends on raw_text)."""
+        """ Extract words (depends on raw_text). """
         return re.findall(r'\w+', self.raw_text.lower())
     
     @property
     @cache
     def word_count(self) -> int:
-        """Count words (depends on words)."""
+        """ Count words (depends on words). """
         return len(self.words)
     
     @property
     @cache
     def unique_words(self) -> set[str]:
-        """Get unique words (depends on words)."""
+        """ Get unique words (depends on words). """
         return set(self.words)
     
     @property
     @cache
     def vocabulary_size(self) -> int:
-        """Size of vocabulary (depends on unique_words)."""
+        """ Size of vocabulary (depends on unique_words). """
         return len(self.unique_words)
 
 # Usage
@@ -1560,7 +1575,7 @@ async def watch_config(
     path: Path,
     interval: float = 1.0
 ) -> AsyncIterable[dict[str, Any]]:
-    """Yield config whenever file changes."""
+    """ Yield config whenever file changes. """
     last_modified = path.stat().st_mtime
     
     while True:
@@ -1596,10 +1611,10 @@ if __name__ == '__main__':
 from typing import Protocol
 
 class Serializable(Protocol):
-    """Objects that can be serialized."""
+    """ Objects that can be serialized. """
     
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary."""
+        """ Convert to dictionary. """
         ...
 
 # serialization.py
@@ -1611,7 +1626,7 @@ def serialize(
     obj: Serializable,
     format: str = 'json'
 ) -> bytes:
-    """Serialize object to bytes.
+    """ Serialize object to bytes.
     
     Args:
         obj: Object to serialize (must be Serializable).

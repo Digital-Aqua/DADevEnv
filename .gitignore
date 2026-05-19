@@ -2,3 +2,4 @@
 # un-symlinked, we should prevent it from being committed.
 .conda/
 
+__pycache__/

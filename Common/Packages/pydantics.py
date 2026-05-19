@@ -1,9 +1,9 @@
 from base64 import b64decode, b64encode
 from typing import (
-    Annotated, Any, BinaryIO, Callable, Literal, Mapping,
-    Self, TextIO
+    Annotated, Any, Awaitable, BinaryIO, Callable, Literal,
+    Mapping, Self, Sequence, TextIO, overload
 )
-from uuid import UUID
+from uuid import UUID, uuid5
 
 from pydantic import (
     BaseModel, ConfigDict, Field, model_validator,
@@ -14,8 +14,11 @@ from pydantic.main import IncEx
 
 
 __all__ = [
-    'WithFrozen', 'Field', 'model_validator',
-    'UUID_str', 'Bytes_b64',
+    'Field', 'Column', 'model_validator',
+    'WithModelDefaults', 'WithFrozen',
+    'WithYaml', 'WithJObject', 'WithSql',
+    'Bytes_b64', 'BytesPGColumn',
+    'JValuePGColumn', 'UUID_str', 'UUIDSeqPGColumn',
     'YamlLoader',
 ]
 
@@ -23,22 +26,78 @@ __all__ = [
 _InfFloat = float
 
 
+def _uuid_from_str(v: UUID | str) -> UUID:
+    if isinstance(v, UUID):
+        return v
+    return UUID(str(v))
+
+
+UUID_str = Annotated[
+    UUID,
+    BeforeValidator(_uuid_from_str),
+    PlainSerializer(str, when_used='json'),
+]
+""" A `uuid.UUID` backed by a JSON string. """
+
+
 class WithModelDefaults(BaseModel):
-    """
-        Applies the usual defaults for a Pydantic model.
-    """
+    """ Applies the usual defaults for a Pydantic model. """
     model_config = ConfigDict(
         use_attribute_docstrings=True
     )
 
 
 class WithFrozen(BaseModel):
-    """
-        Freezes a Pydantic model.
-    """
+    """ Freezes a Pydantic model. """
     model_config = ConfigDict(
         frozen=True
     )
+
+
+# class WithFreeze(BaseModel):
+#     """ Adds freezing to a Pydantic model. """
+
+#     @classmethod
+#     def __pydantic_init_subclass__(cls, **kwargs):
+#         super().__pydantic_init_subclass__(**kwargs)
+
+#         # Check if the class is already frozen
+#         if not (getattr(cls, 'model_config', None)
+#             and getattr(cls.model_config, 'frozen', False)
+#         ):
+#             class _Frozen(cls, WithFrozen): pass
+#             _Frozen.__name__ = f"Frozen{cls.__name__}"
+#             _Frozen.__qualname__ = f"Frozen{cls.__qualname__}"
+#             _Frozen.__doc__ = cls.__doc__
+#             cls._frozen_cls = _Frozen
+#         else:
+#             cls._frozen_cls = cls
+
+#     def model_freeze(self) -> Self:
+#         frozen = self._frozen_cls().model_validate(self)
+#         return frozen  # type: ignore
+
+
+_HASH_SALT = UUID('2c9e7dc5-d69b-4f8a-815e-53a47883b624')
+class WithHashUuid(BaseModel):
+    """ Adds a UUID hash to a model based on its canonical
+        JSON representation.
+    """
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        cls._class_hash_salt = uuid5(
+            _HASH_SALT, cls.__qualname__
+        )
+
+    def hash_uuid(self) -> UUID:
+        """ Returns the a hash for the model's canonical
+            JSON representation as a UUID.
+        """
+        return uuid5(
+            self._class_hash_salt,
+            self.model_dump_json()
+        )
 
 
 try:
@@ -152,7 +211,20 @@ else:
 
 
 try:
+    from .jsontypes import JObject
+except ImportError: pass
+else:
+    class WithJObject(BaseModel):
+        """ Adds JObject support to a Pydantic model. """
+        def model_dump_jobject(self) -> JObject:
+            """ Dumps the model as a JObject. """
+            return self.model_dump(mode='json')
+
+
+try:
     import sqlmodel
+    from sqlmodel import Session
+    from sqlmodel.ext.asyncio.session import AsyncSession
 except ImportError: pass
 else:
     Field = sqlmodel.Field
@@ -165,25 +237,46 @@ else:
         @classmethod
         def sqlmodel_col(cls, field: str | Any) -> Any:
             """
-                Get the SQLAlchemy column for a
+                Gets the SQLAlchemy column for a
                 SQLModel field.
             """
             if isinstance(field, str):
-                return getattr(cls, field) \
-                    .property.columns[0]
-            else:
+                return cls.__table__.c[field] # type: ignore[attr-defined]
+            # InstrumentedAttribute has .key and .class_
+            if hasattr(field, 'key') and hasattr(field, 'class_'):
+                return field.class_.__table__.c[field.key]
+            # Column has .name and optionally .table
+            if hasattr(field, 'name'):
+                return field
+            # Legacy: InstrumentedAttribute with .property
+            if hasattr(field, 'property'):
                 return field.property.columns[0]
+            raise AttributeError(
+                f"Cannot get column from {field!r}"
+            )
 
         @classmethod
         def sqlmodel_colname(cls, field: str | Any) -> str:
             """
-                Get the qualified name of the column for a
-                SQLMo`del field, as `<table>.<column>`.
+                Gets the qualified name of the column for a
+                SQLModel field, as `<table>.<column>`.
             """
             try:
                 col = cls.sqlmodel_col(field)
                 col_name = col.name
-                table_name = col.table.name
+                table_name = (
+                    col.table.name
+                    if col.table is not None
+                    else (
+                        getattr(field, 'class_', cls).__tablename__
+                        if not isinstance(field, str)
+                        else getattr(cls, '__tablename__', cls.__name__)
+                    )
+                )
+                if table_name is None:
+                    table_name = getattr(
+                        getattr(field, 'class_', cls), '__name__', 'table'
+                    ).lower()
             except Exception:
                 if isinstance(field, str):
                     col_name = field
@@ -193,19 +286,80 @@ else:
                 else:
                     raise
             return f"{table_name}.{col_name}"
+    
+        # @overload
+        # def sqlmodel_add(self,
+        #     session: Session
+        # ) -> None: ...
+        # @overload
+        # def sqlmodel_add(self,
+        #     session: AsyncSession
+        # ) -> Awaitable[None]: ...
+        # def sqlmodel_add(self,
+        #     session: Session|AsyncSession
+        # ) -> None|Awaitable[None]:
+        #     """ Adds this model to the session and commits.
+        #     """
+        #     session.add(self)
+        #     return session.commit()
 
 
-def _uuid_from_str(v: UUID | str) -> UUID:
-    if isinstance(v, UUID): return v
-    return UUID(str(v))
-UUID_str = Annotated[
-    UUID,
-    BeforeValidator(_uuid_from_str),
-    PlainSerializer(str, when_used='json')
-]
-"""
-    A `uuid.UUID` backed by a JSON string.
-"""
+# def _uuid_from_str(v: UUID | str) -> UUID:
+#     if isinstance(v, UUID): return v
+#     return UUID(str(v))
+# UUID_str = Annotated[
+#     UUID,
+#     BeforeValidator(_uuid_from_str),
+#     PlainSerializer(str, when_used='json')
+# ]
+# """ A `uuid.UUID` backed by a JSON string. """
+
+# try:
+#     from sqlalchemy import Column
+#     from sqlalchemy.types import TypeEngine
+#     import sqlalchemy.dialects.postgresql as PG
+# except ImportError: pass
+# else:
+#     def UUIDPGColumn(
+#         type_: type[TypeEngine[UUID]]|TypeEngine[UUID] \
+#             = PG.UUID(),
+#         nullable: bool = False,
+#         **kwargs: Any
+#     ) -> Column[UUID]:
+#         """
+#             A SQLAlchemy column for a `UUID` object.
+
+#             Keyword arguments are passed to SQLAlchemy's
+#             `Column` constructor.
+#         """
+#         return Column[UUID](
+#             type_ = type_,
+#             nullable = nullable,
+#             **kwargs
+#         )
+
+#     def UUIDSeqPGColumn(
+#         type_: type[TypeEngine[Sequence[UUID]]]|TypeEngine[Sequence[UUID]] \
+#             = PG.ARRAY(
+#                 PG.UUID(),
+#                 dimensions = 1,
+#                 zero_indexes = False
+#             ),
+#         nullable: bool = True,
+#         **kwargs: Any
+#     ) -> Column[Sequence[UUID]]:
+#         """
+#             A SQLAlchemy column for a sequence of `UUID`
+#             objects.
+
+#             Keyword arguments are passed to SQLAlchemy's
+#             `Column` constructor.
+#         """
+#         return Column[Sequence[UUID]](
+#             type_ = type_,
+#             nullable = nullable,
+#             **kwargs
+#         )
 
 
 def _bytes_from_b64(v: bytes | str) -> bytes:
@@ -218,6 +372,50 @@ Bytes_b64 = Annotated[
     BeforeValidator(_bytes_from_b64),
     PlainSerializer(_bytes_to_b64, when_used='json'),
 ]
-"""
-    A `bytes` object backed by a base64 JSON string.
-"""
+""" A `bytes` object backed by a base64 JSON string. """
+
+try:
+    from sqlalchemy import Column
+    from sqlalchemy.types import TypeEngine
+    import sqlalchemy.dialects.postgresql as PG
+except ImportError: pass
+else:
+    def BytesPGColumn(
+        type_: type[TypeEngine[bytes]]|TypeEngine[bytes] \
+            = PG.BYTEA(),
+        nullable: bool = False,
+        **kwargs
+    ) -> Column[bytes]:
+        """
+            A SQLAlchemy column for a `bytes` object.
+
+            Keyword arguments are passed to SQLAlchemy's
+            `Column` constructor.
+        """
+        return Column[bytes](
+            type_ = type_,
+            nullable = nullable,
+            **kwargs
+        )
+
+    def JValuePGColumn(
+        nullable: bool = False,
+        **kwargs: Any,
+    ) -> Column[Any]:
+        """ A PostgreSQL `JSONB` column for a `JValue`. """
+        return Column(PG.JSONB(), nullable=nullable, **kwargs)
+
+    def UUIDSeqPGColumn(
+        nullable: bool = True,
+        **kwargs: Any,
+    ) -> Column[Any]:
+        """ A PostgreSQL column for a 1-D array of UUIDs. """
+        return Column(
+            PG.ARRAY(
+                PG.UUID(as_uuid=True),
+                dimensions=1,
+                zero_indexes=False,
+            ),
+            nullable=nullable,
+            **kwargs,
+        )

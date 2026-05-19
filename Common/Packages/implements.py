@@ -17,22 +17,22 @@ _registered_implementations = set[tuple[type, type]]()
 #         return runtime_checkable(cls)
 #     return decorator
 
-def implements(
-    get_types: Callable[[], tuple[_TProtocol, type[_TProtocol]]]
-) -> Callable[[_TType], _TType]:
-    """
-    Does nothing but trigger a linter error when the
-    types returned by `get_types` do not match.
-    """
-    def decorator(cls: _TType) -> _TType:
-        return cls
-    return decorator
+# def implements(
+#     get_types: Callable[[], tuple[_TProtocol, type[_TProtocol]]]
+# ) -> Callable[[_TType], _TType]:
+#     """
+#     Does nothing but trigger a linter error when the
+#     types returned by `get_types` do not match.
+#     """
+#     def decorator(cls: _TType) -> _TType:
+#         return cls
+#     return decorator
 
 
 def assert_implements(
     protocol: type[_TProtocol],
     implementation: type[_TProtocol]
-) -> _TProtocol: pass
+) -> None: pass
 
 def assert_implements2(
     protocol: _TProtocol,
@@ -47,3 +47,17 @@ def assert_implements2(
 #             f"Class {cls.__name__} does not implement "
 #             f"protocol {protocol.__name__}."
 #         )
+
+_T = TypeVar('_T')
+
+def implements(
+    base: type[_T],
+    derived: type[_T],
+) -> Callable[[_TType], _TType]:
+    """
+    Does nothing but trigger a linter error when the
+    types returned by `get_types` do not match.
+    """
+    def decorator(cls: _TType) -> _TType:
+        return cls
+    return decorator

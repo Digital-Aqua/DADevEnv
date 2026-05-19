@@ -44,6 +44,7 @@ def wcache(func: Callable[_P, _T]) -> Callable[_P, _T]:
             tuple(kwargs.items())
         )
         inner_cache = cache.setdefault(wkey, {})
-        inner_cache.setdefault(key, func(*args, **kwargs))
+        if key not in inner_cache:
+            inner_cache[key] = func(*args, **kwargs)
         return inner_cache[key]
     return wrapper
